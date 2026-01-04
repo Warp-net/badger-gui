@@ -37,13 +37,10 @@ A graphical user interface for managing Badger key-value databases, similar to M
 
 ```bash
 # For development (requires Wails CLI)
-wails dev
+wails dev -devtools -tags webkit2_41
 
 # For production
-wails build
-
-# Or using go build (after building frontend)
-go build -o badger-gui
+wails build -m -nosyncgomod -tags webkit2_41
 ```
 
 ## Usage
@@ -91,27 +88,11 @@ The application exposes the following backend methods:
 
 ## Development
 
-### Project Structure
-
-```
-├── app.go              # Main application logic and API
-├── main.go             # Application entry point
-├── database/           # Badger database wrapper
-├── domain/             # Data models
-└── frontend/
-    ├── src/
-    │   ├── components/ # Reusable Vue components
-    │   ├── views/      # Page components
-    │   ├── router/     # Vue Router configuration
-    │   └── wailsjs/    # Generated Wails bindings
-    └── dist/           # Built frontend assets
-```
-
 ### Adding New Features
 
 1. Update backend methods in `app.go`
 2. Update frontend components in `frontend/src/`
-3. Run `wails build`
+3. Run `wails build`...
 
 ## License
 
