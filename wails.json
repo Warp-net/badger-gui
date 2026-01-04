@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "badger-gui",
+  "outputfilename": "badger-gui",
+  "go:build:mod": "vendor",
+  "assetdir": "frontend/dist",
+  "wailsjsdir": "frontend/src",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "info": {
+    "product": "badger-gui",
+    "version": "0.0.1",
+    "author": "Vadim Filin"
+  }
+}
