@@ -52,12 +52,10 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
       - name: Build (Wails, Linux with compression)
-        working-directory: cmd/node/member
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
 
       - name: Build (Wails)
-        working-directory: cmd/node/member
         if: ${{ !startsWith(matrix.os, 'ubuntu') }}
         run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod
 
