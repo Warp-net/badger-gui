@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/user"
@@ -54,14 +53,4 @@ func setLinuxDesktopIcon(iconData []byte) {
 	if err := os.WriteFile(iconPath, iconData, 0644); err != nil {
 		log.Fatalf("setting icon: write icon file fail: %v", err)
 	}
-}
-
-func getFile(filePath string) ([]byte, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return io.ReadAll(f)
 }
