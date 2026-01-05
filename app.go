@@ -144,7 +144,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		return AppMessage{msg.Type, OkResponse}
 	case TypeGet:
 		if !a.db.IsRunning() {
-			log.Printf("Database not running for get operation")
+			log.Printf("database not running for get operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var getMsg MessageGet
@@ -157,7 +157,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			log.Printf("getting key %s: %v", getMsg.Key, err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		log.Printf("Key %s retrieved successfully, value length: %d", getMsg.Key, len(value))
+		log.Printf("key %s retrieved successfully, value length: %d", getMsg.Key, len(value))
 		if isImage(value) {
 			value = []byte("[image]")
 		}
@@ -177,7 +177,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			log.Printf("deleting key %s: %v", deleteMsg.Key, err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		log.Printf("Key %s deleted successfully", deleteMsg.Key)
+		log.Printf("key %s deleted successfully", deleteMsg.Key)
 		return AppMessage{msg.Type, OkResponse}
 	case TypeList:
 		if !a.db.IsRunning() {
@@ -197,7 +197,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		log.Printf("Listed %d items, cursor: %s", len(items), cursor)
 		return AppMessage{msg.Type, string(bt)}
 	default:
-		log.Printf("Unsupported message type: %s", msg.Type)
+		log.Printf("unsupported message type: %s", msg.Type)
 		return AppMessage{"", UnknownMessageTypeResponse}
 	}
 }

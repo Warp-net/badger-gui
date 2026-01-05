@@ -88,14 +88,7 @@
           <div class="mb-4">
             <h2 class="text-lg font-semibold mb-2">Key</h2>
             <div class="flex flex-wrap gap-1 p-3 bg-gray-800 border border-gray-700 rounded">
-              <span
-                  v-for="(part, index) in parseKey(selectedKey)"
-                  :key="index"
-                  class="inline-block px-3 py-1 text-sm rounded font-medium"
-                  :style="{ backgroundColor: getColor(index), color: '#fff' }"
-              >
-                {{ part }}
-              </span>
+                {{ selectedKey }}
             </div>
           </div>
 
@@ -253,6 +246,9 @@ export default {
     }
 
     const parseKey = (key) => {
+      key = key.startsWith(delimiter.value)
+          ? key.slice(delimiter.value.length)
+          : key;1
       return key.split(delimiter.value)
     }
 
@@ -392,7 +388,7 @@ export default {
         const response = await Call(message)
         console.log('[Frontend] Received delete response:', response)
         
-        const responseText = parseResponse(response)
+        const responseText = response.body
         console.log('[Frontend] Delete response text:', responseText)
         if (isOkResponse(responseText)) {
           showDeleteConfirm.value = false
