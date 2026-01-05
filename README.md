@@ -1,6 +1,6 @@
 # Badger DB GUI
 ![screenshot.png](screenshot.png)
-A graphical user interface for managing Badger key-value databases, similar to MongoDB Compass.
+A graphical user interface for managing [Badger](https://github.com/dgraph-io/badger) key-value database
 
 ## Features
 
