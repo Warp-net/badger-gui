@@ -25,6 +25,12 @@
             >
               Search
             </button>
+            <button v-if="isInSearch"
+                @click="loadKeys(false)"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+            >
+              ⏎
+            </button>
           </div>
 
           <button
@@ -224,6 +230,7 @@ export default {
     const loading = ref(false)
     const searchPrefix = ref('')
     const searchOffset = ref(0)
+    const isInSearch = ref(false)
     const cursor = ref(null)
     const showError = ref(false)
     const errorMessage = ref('')
@@ -261,45 +268,12 @@ export default {
       return responseText === 'ok'
     }
 
-    const detectBigEndianUint64FromJSON = (raw) => {
-      let s;
-      try {
-        s = JSON.parse(raw);
-      } catch {
-        return null;
-      }
-
-      if (typeof s !== 'string') {
-        return null;
-      }
-
-      const len = s.length;
-      if (len < 8) {
-        return null;
-      }
-
-      let value = 0n;
-
-      for (let i = 0; i < 8; i++) {
-        const byte = s.charCodeAt(i);
-        if (byte > 0xff) {
-          return null;
-        }
-        value = (value << 8n) | BigInt(byte);
-      }
-
-      for (let i = 8; i < len; i++) {
-        const tail = s.charCodeAt(i);
-        if (tail !== 0x00 && tail !== 0x22) { // 0x22 = "
-          return null;
-        }
-      }
-
-      return value;
-    }
-
     const loadKeys = async (loadMore = false) => {
       loading.value = true
+      searchOffset.value = 0
+      isInSearch.value = false
+      searchPrefix.value = ''
+
       try {
         const message = {
           type: 'list',
@@ -346,9 +320,10 @@ export default {
     const searchKeys = async (searchMore = false) => {
       loading.value = true
 
-      if (searchOffset === null || searchOffset.value === 0) {
+      if (!isInSearch.value) {
         keys.value = []
       }
+      isInSearch.value = true
 
       let offset = 0
       if (searchMore) {
@@ -396,7 +371,7 @@ export default {
 
     // TODO
     const searchMore = () => {
-      searchKeys(true)
+      searchKeys(isInSearch)
     }
 
     const selectKey = async (key) => {
@@ -418,13 +393,7 @@ export default {
         if (response.type === 'get') {
           const data = parseResponse(response)
           console.log('[Frontend] Parsed get data:', data)
-          const v = detectBigEndianUint64FromJSON(data.value);
-          if (v !== null) {
-            console.log('[Frontend] Parsed get data: its a number!')
-            currentValue.value = v.toString();
-          } else {
-            currentValue.value = data.value
-          }
+          currentValue.value = data.value
         } else {
           const errorText = parseResponse(response)
           console.error('[Frontend] Get operation failed:', errorText)
@@ -452,7 +421,7 @@ export default {
         const response = await Call(message)
         console.log('[Frontend] Received set response:', response)
         
-        const responseText = parseResponse(response)
+        const responseText = response.body
         console.log('[Frontend] Set response text:', responseText)
         if (isOkResponse(responseText)) {
           editMode.value = false
@@ -551,6 +520,7 @@ export default {
       loading,
       searchPrefix,
       searchOffset,
+      isInSearch,
       cursor,
       showError,
       errorMessage,

@@ -1,6 +1,5 @@
-![icon.png](icon.png)
 # Badger DB GUI
-
+![screenshot.png](screenshot.png)
 A graphical user interface for managing Badger key-value databases, similar to MongoDB Compass.
 
 ## Features
@@ -81,7 +80,8 @@ The application exposes the following backend methods:
 - `OpenDirectoryDialog()`: Opens a directory picker dialog
 - `Call(AppMessage)`: Main RPC endpoint for database operations
   - `open`: Open database connection
-  - `list`: List keys with optional prefix filter and pagination
+  - `list`: List keys with optional pagination
+  - `search`: Search keys with prefix filter and pagination
   - `get`: Retrieve value for a specific key
   - `set`: Create or update a key-value pair
   - `delete`: Remove a key-value pair
@@ -92,8 +92,8 @@ The application exposes the following backend methods:
 
 1. Update backend methods in `app.go`
 2. Update frontend components in `frontend/src/`
-3. Run `wails build`...
+3. Run `wails build -tags webkit2_41`
 
 ## License
 
-See LICENSE file for details.
+See [LICENSE](LICENSE) file for details.
