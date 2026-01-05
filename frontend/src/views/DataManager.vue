@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-900 text-white">
     <!-- Header -->
     <div class="bg-gray-800 border-b border-gray-700 px-6 py-4">
-      <div class="flex items-center justify-between">
+      <div class="flex keys-center justify-between">
         <h1 class="text-2xl font-bold">Badger DB Data Manager</h1>
       </div>
     </div>
@@ -17,10 +17,10 @@
                 type="text"
                 placeholder="Search by prefix..."
                 class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
-                @keyup.enter="loadKeys"
+                @keyup.enter="searchKeys"
             />
             <button
-                @click="loadKeys"
+                @click="searchKeys"
                 class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
             >
               Search
@@ -40,20 +40,20 @@
           <div v-if="loading" class="p-4 text-center text-gray-400">
             Loading...
           </div>
-          <div v-else-if="items.length === 0" class="p-4 text-center text-gray-400">
+          <div v-else-if="keys.length === 0" class="p-4 text-center text-gray-400">
             No entries found
           </div>
           <div v-else>
             <div
-                v-for="item in items"
-                :key="item.key"
-                @click="selectKey(item.key)"
+                v-for="key in keys"
+                :key="key"
+                @click="selectKey(key)"
                 class="p-3 border-b border-gray-700 cursor-pointer hover:bg-gray-700"
-                :class="{ 'bg-gray-700': selectedKey === item.key }"
+                :class="{ 'bg-gray-700': selectedKey === key }"
             >
               <div class="flex flex-wrap gap-1">
                 <span
-                    v-for="(part, index) in parseKey(item.key)"
+                    v-for="(part, index) in parseKey(key)"
                     :key="index"
                     class="inline-block px-2 py-1 text-xs rounded font-medium"
                     :style="{ backgroundColor: getColor(index), color: '#fff' }"
@@ -78,7 +78,7 @@
 
       <!-- Right Panel -->
       <div class="flex-1 flex flex-col">
-        <div v-if="!selectedKey" class="flex-1 flex items-center justify-center text-gray-500">
+        <div v-if="!selectedKey" class="flex-1 flex keys-center justify-center text-gray-500">
           <div class="text-center">
             <p class="text-xl">Select a key to view its value</p>
           </div>
@@ -93,7 +93,7 @@
           </div>
 
           <div class="mb-4 flex-1 flex flex-col">
-            <div class="flex items-center justify-between mb-2">
+            <div class="flex keys-center justify-between mb-2">
               <h2 class="text-lg font-semibold">Value</h2>
               <div class="flex gap-2">
                 <button
@@ -130,7 +130,7 @@
     </div>
 
     <!-- Add/Set Modal -->
-    <div v-if="showAddModal" class="fixed inset-0 bg-black flex items-center justify-center z-50">
+    <div v-if="showAddModal" class="fixed inset-0 bg-black flex keys-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 border border-gray-700">
         <h3 class="text-xl font-semibold mb-4">Add New Entry</h3>
         <form @submit.prevent="addEntry">
@@ -140,7 +140,7 @@
                 v-model="newEntry.key"
                 type="text"
                 required
-                placeholder="e.g., items/book/123"
+                placeholder="e.g., keys/book/123"
                 class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
             />
           </div>
@@ -179,7 +179,7 @@
     <ErrorModal :show="showError" :message="errorMessage" @close="showError = false" />
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black flex items-center justify-center z-50">
+    <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black flex keys-center justify-center z-50">
       <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-700">
         <h3 class="text-xl font-semibold mb-4">Confirm Delete</h3>
         <p class="mb-6 text-gray-300">Are you sure you want to delete this key?</p>
@@ -217,12 +217,13 @@ export default {
   setup() {
     const router = useRouter()
     const delimiter = ref(sessionStorage.getItem('delimiter') || '/')
-    const items = ref([])
+    const keys = ref([])
     const selectedKey = ref(null)
     const currentValue = ref('')
     const editMode = ref(false)
     const loading = ref(false)
     const searchPrefix = ref('')
+    const searchOffset = ref(0)
     const cursor = ref(null)
     const showError = ref(false)
     const errorMessage = ref('')
@@ -260,13 +261,49 @@ export default {
       return responseText === 'ok'
     }
 
+    const detectBigEndianUint64FromJSON = (raw) => {
+      let s;
+      try {
+        s = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+
+      if (typeof s !== 'string') {
+        return null;
+      }
+
+      const len = s.length;
+      if (len < 8) {
+        return null;
+      }
+
+      let value = 0n;
+
+      for (let i = 0; i < 8; i++) {
+        const byte = s.charCodeAt(i);
+        if (byte > 0xff) {
+          return null;
+        }
+        value = (value << 8n) | BigInt(byte);
+      }
+
+      for (let i = 8; i < len; i++) {
+        const tail = s.charCodeAt(i);
+        if (tail !== 0x00 && tail !== 0x22) { // 0x22 = "
+          return null;
+        }
+      }
+
+      return value;
+    }
+
     const loadKeys = async (loadMore = false) => {
       loading.value = true
       try {
         const message = {
           type: 'list',
           body: JSON.stringify({
-            prefix: searchPrefix.value,
             limit: 20,
             cursor: loadMore ? cursor.value : null
           })
@@ -281,9 +318,9 @@ export default {
           console.log('[Frontend] Parsed list data:', data)
           
           if (loadMore) {
-            items.value = [...items.value, ...(data.items || [])]
+            keys.value = [...keys.value, ...(data.keys || [])]
           } else {
-            items.value = data.items || []
+            keys.value = data.keys || []
           }
           
           cursor.value = data.cursor || null
@@ -306,6 +343,62 @@ export default {
       loadKeys(true)
     }
 
+    const searchKeys = async (searchMore = false) => {
+      loading.value = true
+
+      if (searchOffset === null || searchOffset.value === 0) {
+        keys.value = []
+      }
+
+      let offset = 0
+      if (searchMore) {
+        offset = searchOffset.value
+      }
+      try {
+        const message = {
+          type: 'search',
+          body: JSON.stringify({
+            prefix: searchPrefix.value,
+            limit: 20,
+            offset: offset
+          })
+        }
+
+        console.log('[Frontend] Sending search request:', message)
+        const response = await Call(message)
+        console.log('[Frontend] Received search response:', response)
+
+        if (response.type === 'search') {
+          const data = parseResponse(response)
+          console.log('[Frontend] Parsed search data:', data)
+
+          if (searchMore) {
+            keys.value = [...keys.value, ...(data.keys || [])]
+          } else {
+            keys.value = data.keys || []
+          }
+
+          searchOffset.value += data.offset
+        } else {
+          const errorText = parseResponse(response)
+          console.error('[Frontend] Search operation failed:', errorText)
+          errorMessage.value = errorText
+          showError.value = true
+        }
+      } catch (error) {
+        console.error('[Frontend] Error searching keys:', error)
+        errorMessage.value = 'Failed to search keys: ' + (error.message || error)
+        showError.value = true
+      } finally {
+        loading.value = false
+      }
+    }
+
+    // TODO
+    const searchMore = () => {
+      searchKeys(true)
+    }
+
     const selectKey = async (key) => {
       selectedKey.value = key
       editMode.value = false
@@ -325,7 +418,13 @@ export default {
         if (response.type === 'get') {
           const data = parseResponse(response)
           console.log('[Frontend] Parsed get data:', data)
-          currentValue.value = data.value
+          const v = detectBigEndianUint64FromJSON(data.value);
+          if (v !== null) {
+            console.log('[Frontend] Parsed get data: its a number!')
+            currentValue.value = v.toString();
+          } else {
+            currentValue.value = data.value
+          }
         } else {
           const errorText = parseResponse(response)
           console.error('[Frontend] Get operation failed:', errorText)
@@ -357,7 +456,6 @@ export default {
         console.log('[Frontend] Set response text:', responseText)
         if (isOkResponse(responseText)) {
           editMode.value = false
-          // Reload the item in the list
           await loadKeys()
         } else {
           console.error('[Frontend] Set operation failed:', responseText)
@@ -446,12 +544,13 @@ export default {
     })
 
     return {
-      items,
+      keys,
       selectedKey,
       currentValue,
       editMode,
       loading,
       searchPrefix,
+      searchOffset,
       cursor,
       showError,
       errorMessage,
@@ -461,7 +560,9 @@ export default {
       parseKey,
       getColor,
       loadKeys,
+      searchKeys,
       loadMore,
+      searchMore,
       selectKey,
       updateValue,
       confirmDelete,

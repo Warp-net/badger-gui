@@ -16,6 +16,9 @@ import (
 //go:embed frontend/dist
 var assets embed.FS
 
+//go:embed icon.png
+var icon []byte
+
 func main() {
 	db, err := database.New(nil)
 	if err != nil {
@@ -24,7 +27,6 @@ func main() {
 
 	app := NewApp(db)
 
-	icon, err := getFile("icon.png")
 	setLinuxDesktopIcon(icon)
 
 	err = wails.Run(&options.App{

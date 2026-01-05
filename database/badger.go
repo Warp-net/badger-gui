@@ -1,10 +1,12 @@
 package database
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
-	"github.com/filinvadim/badger-gui/domain"
+	"fmt"
 	"log"
+	"math"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -12,43 +14,21 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
+
+	dsq "github.com/ipfs/go-datastore/query"
 )
-
-/*
-  BadgerDB is a high-performance, embedded key-value database
-  written in Go, utilizing LSM-trees (Log-Structured Merge-Trees) for efficient
-  data storage and processing. It is designed for high-load scenarios that require
-  minimal latency and high throughput.
-
-  Key Features:
-    - Embedded: Operates within the application without the need for a separate database: server.
-    - Key-Value Store: Enables storing and retrieving data by key using efficient indexing.
-    - LSM Architecture: Provides high write speed due to log-structured data storage.
-    - Zero GC Overhead: Minimizes garbage collection impact by directly working with mmap and byte slices.
-    - ACID Transactions: Supports transactions with snapshot isolation.
-    - In-Memory and Disk Mode: Allows storing data in RAM or on SSD/HDD.
-    - Low Resource Consumption: Suitable for embedded systems and server applications with limited memory.
-
-  BadgerDB is used in cases where:
-    - High Performance is required: It is faster than traditional disk-based databases (e.g., BoltDB) due to the LSM structure.
-    - Embedded Storage is needed: No need to run a separate database: server (unlike Redis, PostgreSQL, etc.).
-    - Efficient Streaming Writes are required: Suitable for logs, caches, message brokers, and other write-intensive workloads.
-    - Transaction Support is necessary: Allows safely executing multiple operations within a single transaction.
-    - Large Data Volumes are handled: Supports sharding and disk offloading, useful for processing massive datasets.
-    - Flexibility is key: Easily integrates into distributed systems and P2P applications.
-
-  BadgerDB is especially useful for systems where high write speed, low overhead, and the ability to operate without an external database: server are critical.
-  https://github.com/dgraph-io/badger
-*/
 
 const (
 	defaultDiscardRatioGC = 0.5
 	defaultIntervalGC     = time.Hour
 	defaultSleepGC        = time.Second
+	defaultLimit          = 20
 
 	ErrNotRunning    = DBError("DB is not running")
 	ErrWrongPassword = DBError("wrong username or password")
 )
+
+type Key = string
 
 type DBError string
 
@@ -149,42 +129,11 @@ func (db *DB) Open(dbPath, key, compression string) (err error) {
 		return err
 	}
 	db.isRunning.Store(true)
-	if !db.badgerOpts.InMemory {
-		go db.runEventualGC()
-	}
-
 	return nil
 }
 
 func (db *DB) IsRunning() bool {
 	return db.isRunning.Load()
-}
-
-func (db *DB) runEventualGC() {
-	if db.badgerOpts.InMemory {
-		return
-	}
-	log.Println("database: garbage collection started")
-	gcTicker := time.NewTicker(db.intervalGC)
-	defer gcTicker.Stop()
-
-	_ = db.badger.RunValueLogGC(db.discardRatioGC)
-	for {
-		select {
-		case <-gcTicker.C:
-			for {
-				err := db.badger.RunValueLogGC(db.discardRatioGC)
-				if errors.Is(err, badger.ErrNoRewrite) ||
-					errors.Is(err, badger.ErrRejected) {
-					break
-				}
-				time.Sleep(db.sleepGC)
-			}
-			log.Println("database: garbage collection complete")
-		case <-db.stopChan:
-			return
-		}
-	}
 }
 
 func (db *DB) Set(key string, value []byte) error {
@@ -238,99 +187,258 @@ func (db *DB) Delete(key string) error {
 	}
 
 	return db.badger.Update(func(txn *badger.Txn) error {
-		if err := txn.Delete([]byte(key)); err != nil {
-			return err
-		}
 		return txn.Delete([]byte(key))
 	})
 }
 
-const endCursor = "end"
-
-func (db *DB) List(prefix string, limit *int, cursor *string) (domain.Items, string, error) {
-	var startCursor string
-	if cursor != nil && *cursor != "" {
-		startCursor = *cursor
+func (db *DB) List(limit *int, startCursor *string) (keys []Key, cursor string, err error) {
+	if db == nil {
+		return nil, "", ErrNotRunning
 	}
-	if startCursor == endCursor {
-		return []domain.Item{}, endCursor, nil
+	if !db.isRunning.Load() {
+		return nil, "", ErrNotRunning
 	}
-
-	if limit == nil {
-		defaultLimit := 20
-		limit = &defaultLimit
-	}
-
-	items := make([]domain.Item, 0, *limit) //
-	cur, err := db.iterate(
-		prefix, startCursor, *limit,
-		func(key string, value []byte) {
-			items = append(items, domain.Item{
-				Key:   key,
-				Value: string(value),
-			})
-			return
-		},
+	var (
+		count   = 0
+		lastKey string
 	)
-	return items, cur, err
+
+	err = db.badger.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		opts.PrefetchValues = false
+
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		if startCursor != nil && *startCursor != "" {
+			it.Seek([]byte(*startCursor))
+			if it.Valid() && string(it.Item().Key()) == *startCursor {
+				it.Next()
+			}
+		} else {
+			it.Rewind()
+		}
+
+		for ; it.Valid(); it.Next() {
+			item := it.Item()
+			key := string(item.Key())
+
+			keys = append(keys, key)
+			lastKey = key
+			count++
+
+			if limit != nil && count >= *limit {
+				break
+			}
+		}
+		return nil
+	})
+
+	if limit != nil && len(keys) < *limit {
+		lastKey = "end"
+	}
+
+	return keys, lastKey, err
 }
 
-type iterKeysValuesFunc func(key string, val []byte)
-
-func (db *DB) iterate(
-	prefix string,
-	startCursor string,
-	limit int,
-	handler iterKeysValuesFunc,
-) (cursor string, err error) {
-	if startCursor == endCursor {
-		return endCursor, nil
+func (db *DB) Search(prefix string, limit *int, offset int) (keys []Key, err error) {
+	if db == nil {
+		return nil, ErrNotRunning
 	}
-	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = false
-	opts.PrefetchSize = limit * 2
-
-	txn := db.badger.NewTransaction(false)
-	defer txn.Discard()
-	it := txn.NewIterator(opts)
-
-	var (
-		lastKey string
-		iterNum int
-		errs    []error
-	)
-
-	seekKey := []byte(prefix)
-	if startCursor != "" {
-		seekKey = []byte(startCursor)
+	if !db.isRunning.Load() {
+		return nil, ErrNotRunning
+	}
+	if limit == nil {
+		limit = func(i int) *int { return &i }(defaultLimit)
 	}
 
-	for it.Seek(seekKey); it.ValidForPrefix([]byte(prefix)); it.Next() {
-		item := it.Item()
-		key := string(item.Key())
+	tx := db.badger.NewTransaction(false)
+	results, err := db.query(tx, dsq.Query{
+		Prefix:            prefix,
+		Limit:             *limit,
+		Offset:            offset,
+		KeysOnly:          true,
+		ReturnExpirations: false,
+		ReturnsSizes:      false,
+	})
+	if err != nil {
+		tx.Discard()
+		return nil, err
+	}
+	entries, err := results.Rest()
+	if err != nil {
+		tx.Discard()
+		return nil, err
+	}
+	for _, entry := range entries {
+		keys = append(keys, entry.Key)
+	}
+	return keys, nil
+}
 
-		if iterNum >= limit {
-			lastKey = key
-			break
+func (db *DB) query(tx *badger.Txn, q dsq.Query) (_ dsq.Results, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = DBError("query recovered")
+			err = fmt.Errorf("%w: %v", err, r)
+		}
+	}()
+
+	if !db.IsRunning() {
+		return nil, ErrNotRunning
+	}
+	opt := badger.DefaultIteratorOptions
+	opt.PrefetchValues = !q.KeysOnly
+	opt.Prefix = []byte(q.Prefix)
+
+	// Handle ordering
+	if len(q.Orders) > 0 {
+		switch q.Orders[0].(type) {
+		case dsq.OrderByKey, *dsq.OrderByKey:
+		// We order by key by default.
+		case dsq.OrderByKeyDescending, *dsq.OrderByKeyDescending:
+			// Reverse order by key
+			opt.Reverse = true
+		default:
+			// Ok, we have a weird order we can't handle. Let's
+			// perform the _base_ query (prefix, filter, etc.), then
+			// handle sort/offset/limit later.
+
+			// Skip the stuff we can't apply.
+			baseQuery := q
+			baseQuery.Limit = 0
+			baseQuery.Offset = 0
+			baseQuery.Orders = nil
+
+			// perform the base query.
+			res, err := db.query(tx, baseQuery)
+			if err != nil {
+				return nil, err
+			}
+
+			res = dsq.ResultsReplaceQuery(res, q)
+
+			naiveQuery := q
+			naiveQuery.Prefix = ""
+			naiveQuery.Filters = nil
+
+			return dsq.NaiveQueryApply(naiveQuery, res), nil
+		}
+	}
+
+	it := tx.NewIterator(opt)
+	results := dsq.ResultsWithContext(q, func(ctx context.Context, output chan<- dsq.Result) {
+		defer tx.Discard()
+		defer it.Close()
+
+		it.Rewind()
+
+		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next() {
+			if !db.IsRunning() {
+				return
+			}
+
+			if len(q.Filters) == 0 {
+				skipped++
+				continue
+			}
+			item := it.Item()
+
+			matches := true
+			check := func(value []byte) error {
+				e := dsq.Entry{
+					Key:   string(item.Key()),
+					Value: value,
+					Size:  int(item.ValueSize()),
+				}
+
+				if q.ReturnExpirations {
+					e.Expiration = expires(item)
+				}
+				matches = filter(q.Filters, e)
+				return nil
+			}
+
+			var err error
+			if q.KeysOnly {
+				err = check(nil)
+			} else {
+				err = item.Value(check)
+			}
+
+			if err != nil {
+				select {
+				case output <- dsq.Result{Error: err}:
+				case <-db.stopChan:
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+			if !matches {
+				skipped++
+			}
 		}
 
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		handler(key, val)
-		iterNum++
-	}
+		for sent := 0; (q.Limit <= 0 || sent < q.Limit) && it.Valid(); it.Next() {
+			if !db.IsRunning() {
+				return
+			}
+			item := it.Item()
+			e := dsq.Entry{Key: string(item.Key())}
 
-	if iterNum < limit {
-		lastKey = endCursor
+			var result dsq.Result
+			if !q.KeysOnly {
+				b, err := item.ValueCopy(nil)
+				if err != nil {
+					result = dsq.Result{Error: err}
+				} else {
+					e.Value = b
+					e.Size = len(b)
+					result = dsq.Result{Entry: e}
+				}
+			} else {
+				e.Size = int(item.ValueSize())
+				result = dsq.Result{Entry: e}
+			}
+
+			if q.ReturnExpirations {
+				result.Expiration = expires(item)
+			}
+
+			if result.Error == nil && filter(q.Filters, e) {
+				continue
+			}
+			select {
+			case output <- result:
+				sent++
+			case <-db.stopChan:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+
+	return results, nil
+}
+
+func filter(filters []dsq.Filter, entry dsq.Entry) bool {
+	for _, f := range filters {
+		if !f.Filter(entry) {
+			return true
+		}
 	}
-	it.Close()
-	if err := txn.Commit(); err != nil {
-		return "", err
+	return false
+}
+
+func expires(item *badger.Item) time.Time {
+	expiresAt := item.ExpiresAt()
+	if expiresAt > math.MaxInt64 {
+		expiresAt--
 	}
-	return lastKey, errors.Join(errs...)
+	return time.Unix(int64(expiresAt), 0) //#nosec
 }
 
 func (db *DB) Close() {

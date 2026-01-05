@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/filinvadim/badger-gui/domain"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"log"
 	"net/http"
@@ -16,7 +15,8 @@ type Storer interface {
 	Set(key string, value []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
-	List(prefix string, limit *int, cursor *string) (domain.Items, string, error)
+	List(limit *int, startCursor *string) (keys []string, cursor string, err error)
+	Search(prefix string, limit *int, offset int) (keys []string, err error)
 	IsRunning() bool
 	Close()
 }
@@ -29,6 +29,7 @@ const (
 	TypeDelete messageType = "delete"
 	TypeList   messageType = "list"
 	TypeGet    messageType = "get"
+	TypeSearch messageType = "search"
 
 	OkResponse                 = "ok"
 	NotRunningResponse         = "db isn't running"
@@ -59,14 +60,29 @@ type MessageDelete struct {
 type MessageGet MessageDelete
 
 type MessageList struct {
-	Prefix string  `json:"prefix"`
 	Limit  *int    `json:"limit"`
 	Cursor *string `json:"cursor"`
 }
 
+type MessageSearch struct {
+	Prefix string `json:"prefix"`
+	Limit  *int   `json:"limit"`
+	Offset int    `json:"offset"`
+}
+
 type ListResponse struct {
-	Cursor string       `json:"cursor"`
-	Items  domain.Items `json:"items"`
+	Cursor string   `json:"cursor"`
+	Keys   []string `json:"keys"`
+}
+
+type SearchResponse struct {
+	Keys   []string `json:"keys"`
+	Offset int      `json:"offset"`
+}
+
+type Item struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type App struct {
@@ -161,7 +177,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		if isImage(value) {
 			value = []byte("[image]")
 		}
-		bt, _ := json.Marshal(domain.Item{Key: getMsg.Key, Value: string(value)})
+		bt, _ := json.Marshal(Item{Key: getMsg.Key, Value: string(value)})
 		return AppMessage{msg.Type, string(bt)}
 	case TypeDelete:
 		if !a.db.IsRunning() {
@@ -189,12 +205,30 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			log.Printf("unmarshaling list message: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		items, cursor, err := a.db.List(listMsg.Prefix, listMsg.Limit, listMsg.Cursor)
+		keys, cursor, err := a.db.List(listMsg.Limit, listMsg.Cursor)
 		if err != nil {
 			log.Printf("listing items failure: %v", err)
 		}
-		bt, _ := json.Marshal(ListResponse{Cursor: cursor, Items: items})
-		log.Printf("Listed %d items, cursor: %s", len(items), cursor)
+		bt, _ := json.Marshal(ListResponse{Cursor: cursor, Keys: keys})
+		log.Printf("Listed %d items, cursor: %s", len(keys), cursor)
+		return AppMessage{msg.Type, string(bt)}
+	case TypeSearch:
+		if !a.db.IsRunning() {
+			log.Printf("database not running for list operation")
+			return AppMessage{msg.Type, NotRunningResponse}
+		}
+		var searchMsg MessageSearch
+		if err := json.Unmarshal([]byte(msg.Body), &searchMsg); err != nil {
+			log.Printf("unmarshaling list message: %v", err)
+			return AppMessage{msg.Type, err.Error()}
+		}
+
+		keys, err := a.db.Search(searchMsg.Prefix, searchMsg.Limit, searchMsg.Offset)
+		if err != nil {
+			log.Printf("listing items failure: %v", err)
+		}
+		bt, _ := json.Marshal(SearchResponse{Keys: keys, Offset: len(keys)})
+		log.Printf("Found %d items", len(keys))
 		return AppMessage{msg.Type, string(bt)}
 	default:
 		log.Printf("unsupported message type: %s", msg.Type)
