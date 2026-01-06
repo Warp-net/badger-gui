@@ -6,7 +6,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -105,10 +104,8 @@ func (a *App) startup(ctx context.Context) {
 
 // OpenDirectoryDialog opens a directory picker dialog
 func (a *App) OpenDirectoryDialog() string {
-	home, _ := os.UserHomeDir()
 	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Select Badger Database Folder",
-		DefaultDirectory: home + "/.warpdata/testnet/storage",
+		Title: "Select Badger Database Folder",
 	})
 	if err != nil {
 		log.Printf("error opening directory dialog: %v", err)
