@@ -36,7 +36,7 @@ A graphical user interface for managing [Badger](https://github.com/dgraph-io/ba
 
 ```bash
 # For development (requires Wails CLI)
-wails dev -devtools -tags webkit2_41
+wails dev -m -nosyncgomod -devtools -tags webkit2_41
 
 # For production
 wails build -m -nosyncgomod -tags webkit2_41
@@ -92,7 +92,7 @@ The application exposes the following backend methods:
 
 1. Update backend methods in `app.go`
 2. Update frontend components in `frontend/src/`
-3. Run `wails build -tags webkit2_41`
+3. Run `wails build -m -nosyncgomod -tags webkit2_41`
 
 ## License
 
