@@ -12,7 +12,7 @@
             <input
                 v-model="form.path"
                 type="text"
-                placeholder="/path/to/badger/db"
+                placeholder="/path/to/badger/db (leave blank for in-memory run)"
                 class="flex-1 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
             />
             <button
@@ -114,6 +114,10 @@ export default {
       }
     }
 
+    const parseResponse = (response) => {
+      return JSON.parse(response.body)
+    }
+
     const openDatabase = async () => {
       loading.value = true
       try {
@@ -130,14 +134,15 @@ export default {
         const response = await Call(message)
 
         if (response?.type === 'open') {
-          const responseText = response.body
-          if (responseText === 'ok') {
+          const body = parseResponse(response)
+          if (body.status === 'ok') {
             sessionStorage.setItem('delimiter', form.value.delimiter)
+            sessionStorage.setItem('inmemory', `${body.inmemory}`)
             await router.push('/manager')
             return
           }
 
-          errorMessage.value = String(responseText ?? 'Unknown error')
+          errorMessage.value = String(response.body ?? 'Unknown error')
           showError.value = true
           return
         }

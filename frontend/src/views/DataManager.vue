@@ -2,8 +2,16 @@
   <div class="min-h-screen bg-gray-900 text-white">
     <!-- Header -->
     <div class="bg-gray-800 border-b border-gray-700 px-6 py-4">
-      <div class="flex keys-center justify-between">
-        <h1 class="text-2xl font-bold">Badger DB Data Manager</h1>
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+          Badger DB Data Manager
+          <span
+              v-if="isInMemory"
+              class="text-xs font-semibold px-2 py-1 rounded bg-red-600 text-white"
+          >
+        IN MEMORY
+      </span>
+        </h1>
       </div>
     </div>
 
@@ -223,6 +231,7 @@ export default {
   setup() {
     const router = useRouter()
     const delimiter = ref(sessionStorage.getItem('delimiter') || '/')
+    const isInMemory = ref(sessionStorage.getItem('inmemory') === 'true')
     const keys = ref([])
     const selectedKey = ref(null)
     const currentValue = ref('')
@@ -521,6 +530,7 @@ export default {
       searchPrefix,
       searchOffset,
       isInSearch,
+      isInMemory,
       cursor,
       showError,
       errorMessage,

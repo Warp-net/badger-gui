@@ -5,16 +5,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/dgraph-io/badger/v4/options"
 	"log"
 	"math"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/dgraph-io/badger/v4/options"
-
 	dsq "github.com/ipfs/go-datastore/query"
 )
 
@@ -45,7 +43,7 @@ type Options struct {
 type DB struct {
 	badger *badger.DB
 
-	isRunning *atomic.Bool
+	isRunning, isInMemory *atomic.Bool
 
 	badgerOpts     badger.Options
 	discardRatioGC float64
@@ -60,13 +58,14 @@ func New(o *Options) (*DB, error) {
 		o = &Options{}
 	}
 
-	currentDir, _ := os.Getwd()
-	badgerOpts := badger.
-		DefaultOptions(currentDir + "/.badger").
+	defaultOpts := badger.
+		DefaultOptions("").
+		WithDir("").
+		WithValueDir("").
+		WithInMemory(true).
 		WithSyncWrites(true).
 		WithIndexCacheSize(256 << 20).
-		WithCompression(options.None).
-		WithNumCompactors(4).
+		WithNumCompactors(2).
 		WithLoggingLevel(badger.ERROR).
 		WithBlockCacheSize(512 << 20)
 
@@ -82,42 +81,32 @@ func New(o *Options) (*DB, error) {
 
 	storage := &DB{
 		badger: nil, stopChan: make(chan struct{}), isRunning: new(atomic.Bool),
-		badgerOpts:     badgerOpts,
+		isInMemory: new(atomic.Bool), badgerOpts: defaultOpts,
 		discardRatioGC: o.discardRatioGC, intervalGC: o.intervalGC, sleepGC: o.sleepGC,
 	}
-
+	storage.isInMemory.Store(true)
 	return storage, nil
 }
 
 func (db *DB) Open(dbPath, key, compression string) (err error) {
-	if dbPath == "" {
-		db.badgerOpts = badger.
-			DefaultOptions("").
-			WithDir("").
-			WithValueDir("").
-			WithInMemory(true).
-			WithSyncWrites(true).
-			WithIndexCacheSize(256 << 20).
-			WithNumCompactors(2).
-			WithLoggingLevel(badger.ERROR).
-			WithBlockCacheSize(512 << 20)
-	} else {
-		db.badgerOpts = db.badgerOpts.WithDir(dbPath)
-	}
-	if key != "" {
-		if hexKey, err := hex.DecodeString(key); err == nil {
-			key = string(hexKey)
+	if dbPath != "" {
+		db.isInMemory.Store(false)
+		db.badgerOpts = db.badgerOpts.WithDir(dbPath).WithValueDir(dbPath).WithInMemory(false)
+		if key != "" {
+			if hexKey, err := hex.DecodeString(key); err == nil {
+				key = string(hexKey)
+			}
+			db.badgerOpts = db.badgerOpts.WithEncryptionKey([]byte(key))
 		}
-		db.badgerOpts = db.badgerOpts.WithEncryptionKey([]byte(key))
-	}
-	if compression != "" {
-		switch strings.ToLower(compression) {
-		case "snappy":
-			db.badgerOpts = db.badgerOpts.WithCompression(options.Snappy)
-		case "zstd":
-			db.badgerOpts = db.badgerOpts.WithCompression(options.ZSTD)
-		default:
-			db.badgerOpts = db.badgerOpts.WithCompression(options.None)
+		if compression != "" {
+			switch strings.ToLower(compression) {
+			case "snappy":
+				db.badgerOpts = db.badgerOpts.WithCompression(options.Snappy)
+			case "zstd":
+				db.badgerOpts = db.badgerOpts.WithCompression(options.ZSTD)
+			default:
+				db.badgerOpts = db.badgerOpts.WithCompression(options.None)
+			}
 		}
 	}
 
@@ -134,6 +123,10 @@ func (db *DB) Open(dbPath, key, compression string) (err error) {
 
 func (db *DB) IsRunning() bool {
 	return db.isRunning.Load()
+}
+
+func (db *DB) IsInMemory() bool {
+	return db.isInMemory.Load()
 }
 
 func (db *DB) Set(key string, value []byte) error {

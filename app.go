@@ -17,6 +17,7 @@ type Storer interface {
 	List(limit *int, startCursor *string) (keys []string, cursor string, err error)
 	Search(prefix string, limit *int, offset int) (keys []string, err error)
 	IsRunning() bool
+	IsInMemory() bool
 	Close()
 }
 
@@ -30,8 +31,9 @@ const (
 	TypeGet    messageType = "get"
 	TypeSearch messageType = "search"
 
-	OkResponse                 = "ok"
+	OkStatus                   = "ok"
 	NotRunningResponse         = "db isn't running"
+	AlreadyRunningResponse     = "db already running"
 	UnknownMessageTypeResponse = "unknown message type"
 )
 
@@ -50,6 +52,11 @@ type MessageOpen struct {
 type MessageSet struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
+}
+
+type OpenResponse struct {
+	Status   string `json:"status"`
+	InMemory bool   `json:"inmemory"`
 }
 
 type MessageDelete struct {
@@ -85,9 +92,8 @@ type Item struct {
 }
 
 type App struct {
-	ctx       context.Context
-	db        Storer
-	delimiter string
+	ctx context.Context
+	db  Storer
 }
 
 // NewApp creates a new App application struct
@@ -105,7 +111,7 @@ func (a *App) startup(ctx context.Context) {
 // OpenDirectoryDialog opens a directory picker dialog
 func (a *App) OpenDirectoryDialog() string {
 	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Badger Database Folder",
+		Title: "Select Badger database folder",
 	})
 	if err != nil {
 		log.Printf("error opening directory dialog: %v", err)
@@ -122,55 +128,55 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 	switch msg.Type {
 	case TypeOpen:
 		if a.db.IsRunning() {
-			log.Printf("database already running")
-			return AppMessage{msg.Type, "already running"}
+			log.Printf(AlreadyRunningResponse)
+			return AppMessage{msg.Type, AlreadyRunningResponse}
 		}
 		var openMsg MessageOpen
 		if err := json.Unmarshal([]byte(msg.Body), &openMsg); err != nil {
-			log.Printf("unmarshaling open message: %v", err)
+			log.Printf("unmarshaling open message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 
-		log.Printf("Opening database at path: %s, compression: %s", openMsg.Path, openMsg.Compression)
+		log.Printf("opening db at path: [%s], compression: %s", openMsg.Path, openMsg.Compression)
 		if err := a.db.Open(openMsg.Path, openMsg.DecryptionKey, openMsg.Compression); err != nil {
-			log.Printf("opening database: %v", err)
+			log.Printf("opening db failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		a.delimiter = openMsg.Delimiter
-		log.Printf("Database opened successfully with delimiter: %s", a.delimiter)
-		return AppMessage{msg.Type, OkResponse}
+		log.Printf("db opened with delimiter [%s], in memory [%t]", openMsg.Delimiter, a.db.IsInMemory())
+		bt, _ := json.Marshal(OpenResponse{OkStatus, a.db.IsInMemory()})
+		return AppMessage{msg.Type, string(bt)}
 	case TypeSet:
 		if !a.db.IsRunning() {
-			log.Printf("Database not running for set operation")
+			log.Printf("db not running for set operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var setMsg MessageSet
 		if err := json.Unmarshal([]byte(msg.Body), &setMsg); err != nil {
-			log.Printf("unmarshaling set message: %v", err)
+			log.Printf("unmarshaling set message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 		if err := a.db.Set(setMsg.Key, []byte(setMsg.Value)); err != nil {
-			log.Printf("setting key %s: %v", setMsg.Key, err)
+			log.Printf("setting key failure %s: %v", setMsg.Key, err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 		log.Printf("key %s set successfully", setMsg.Key)
-		return AppMessage{msg.Type, OkResponse}
+		return AppMessage{msg.Type, OkStatus}
 	case TypeGet:
 		if !a.db.IsRunning() {
-			log.Printf("database not running for get operation")
+			log.Printf("db not running for get operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var getMsg MessageGet
 		if err := json.Unmarshal([]byte(msg.Body), &getMsg); err != nil {
-			log.Printf("unmarshaling get message: %v", err)
+			log.Printf("unmarshaling get message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 		value, err := a.db.Get(getMsg.Key)
 		if err != nil {
-			log.Printf("getting key %s: %v", getMsg.Key, err)
+			log.Printf("getting key failure %s: %v", getMsg.Key, err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		log.Printf("key %s retrieved successfully, value length: %d", getMsg.Key, len(value))
+		log.Printf("key %s retrieved, value length: %d", getMsg.Key, len(value))
 		if isImage(value) {
 			value = []byte("[image]")
 		}
@@ -178,28 +184,28 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		return AppMessage{msg.Type, string(bt)}
 	case TypeDelete:
 		if !a.db.IsRunning() {
-			log.Printf("Database not running for delete operation")
+			log.Printf("db not running for delete operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var deleteMsg MessageDelete
 		if err := json.Unmarshal([]byte(msg.Body), &deleteMsg); err != nil {
-			log.Printf("unmarshaling delete message: %v", err)
+			log.Printf("unmarshaling delete message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 		if err := a.db.Delete(deleteMsg.Key); err != nil {
-			log.Printf("deleting key %s: %v", deleteMsg.Key, err)
+			log.Printf("deleting key failure %s: %v", deleteMsg.Key, err)
 			return AppMessage{msg.Type, err.Error()}
 		}
-		log.Printf("key %s deleted successfully", deleteMsg.Key)
-		return AppMessage{msg.Type, OkResponse}
+		log.Printf("key %s deleted", deleteMsg.Key)
+		return AppMessage{msg.Type, OkStatus}
 	case TypeList:
 		if !a.db.IsRunning() {
-			log.Printf("database not running for list operation")
+			log.Printf("db not running for list operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var listMsg MessageList
 		if err := json.Unmarshal([]byte(msg.Body), &listMsg); err != nil {
-			log.Printf("unmarshaling list message: %v", err)
+			log.Printf("unmarshaling list message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 		keys, cursor, err := a.db.List(listMsg.Limit, listMsg.Cursor)
@@ -207,16 +213,16 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			log.Printf("listing items failure: %v", err)
 		}
 		bt, _ := json.Marshal(ListResponse{Cursor: cursor, Keys: keys})
-		log.Printf("Listed %d items, cursor: %s", len(keys), cursor)
+		log.Printf("listed %d items, cursor: %s", len(keys), cursor)
 		return AppMessage{msg.Type, string(bt)}
 	case TypeSearch:
 		if !a.db.IsRunning() {
-			log.Printf("database not running for list operation")
+			log.Printf("db not running for list operation")
 			return AppMessage{msg.Type, NotRunningResponse}
 		}
 		var searchMsg MessageSearch
 		if err := json.Unmarshal([]byte(msg.Body), &searchMsg); err != nil {
-			log.Printf("unmarshaling list message: %v", err)
+			log.Printf("unmarshaling list message failure: %v", err)
 			return AppMessage{msg.Type, err.Error()}
 		}
 
@@ -225,7 +231,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			log.Printf("listing items failure: %v", err)
 		}
 		bt, _ := json.Marshal(SearchResponse{Keys: keys, Offset: len(keys)})
-		log.Printf("Found %d items", len(keys))
+		log.Printf("found %d items", len(keys))
 		return AppMessage{msg.Type, string(bt)}
 	default:
 		log.Printf("unsupported message type: %s", msg.Type)
