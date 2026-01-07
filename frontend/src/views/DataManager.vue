@@ -108,8 +108,24 @@
 
           <div class="mb-4 flex-1 flex flex-col">
             <div class="flex keys-center justify-between mb-2">
-              <h2 class="text-lg font-semibold">Value</h2>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-semibold">Value</h2>
+                <span
+                    v-if="valueTypeInfo.detectedType !== 'string'"
+                    class="text-xs font-semibold px-2 py-1 rounded"
+                    :style="{ backgroundColor: valueTypeBadge.color, color: '#fff' }"
+                >
+                  {{ valueTypeBadge.label }}
+                </span>
+              </div>
               <div class="flex gap-2">
+                <button
+                    v-if="!editMode && valueTypeInfo.detectedType !== 'string'"
+                    @click="showOriginalValue = !showOriginalValue"
+                    class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+                >
+                  {{ showOriginalValue ? 'Show Converted' : 'Show Original' }}
+                </button>
                 <button
                     @click="editMode = !editMode"
                     class="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-yellow-500"
@@ -133,7 +149,7 @@
             </div>
 
             <textarea
-                v-model="currentValue"
+                v-model="displayValue"
                 :readonly="!editMode"
                 class="flex-1 p-3 bg-gray-800 border border-gray-700 rounded font-mono text-sm focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
                 :class="{ 'bg-gray-700': editMode }"
@@ -218,10 +234,11 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Call } from '../wailsjs/go/main/App'
 import ErrorModal from '../components/ErrorModal.vue'
+import { detectAndConvertDataType, getDataTypeBadge } from '../utils/dataTypeConverter.js'
 
 export default {
   name: 'DataManager',
@@ -246,6 +263,33 @@ export default {
     const showAddModal = ref(false)
     const showDeleteConfirm = ref(false)
     const newEntry = ref({ key: '', value: '' })
+    const showOriginalValue = ref(false)
+
+    // Computed property for data type detection and conversion
+    const valueTypeInfo = computed(() => {
+      return detectAndConvertDataType(currentValue.value)
+    })
+
+    const valueTypeBadge = computed(() => {
+      return getDataTypeBadge(valueTypeInfo.value.detectedType)
+    })
+
+    const displayValue = computed({
+      get() {
+        if (editMode.value || showOriginalValue.value) {
+          return currentValue.value
+        }
+        return valueTypeInfo.value.displayValue
+      },
+      set(newVal) {
+        currentValue.value = newVal
+      }
+    })
+
+    // Reset showOriginalValue when switching keys
+    watch(selectedKey, () => {
+      showOriginalValue.value = false
+    })
 
     const colors = [
       '#3B82F6', // blue
@@ -537,6 +581,10 @@ export default {
       showAddModal,
       showDeleteConfirm,
       newEntry,
+      showOriginalValue,
+      valueTypeInfo,
+      valueTypeBadge,
+      displayValue,
       parseKey,
       getColor,
       loadKeys,
