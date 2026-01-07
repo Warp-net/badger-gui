@@ -1,4 +1,4 @@
-<iframe src="https://snapcraft.io/badger-gui/embedded?button=black" frameborder="0" width="100%" height="450px" style="border: 1px solid #CCC; border-radius: 2px;"></iframe>
+[![badger-gui](https://snapcraft.io/badger-gui/badge.svg)](https://snapcraft.io/badger-gui)
 # Badger DB GUI
 ![screenshot.png](screenshot.png)
 A graphical user interface for managing [Badger](https://github.com/dgraph-io/badger) key-value database
