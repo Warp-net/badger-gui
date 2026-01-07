@@ -36,7 +36,7 @@ A graphical user interface for managing [Badger](https://github.com/dgraph-io/ba
 
 ```bash
 # For development (requires Wails CLI)
-wails dev -m -nosyncgomod -devtools -tags webkit2_41
+wails dev -m -nosyncgomod -tags webkit2_41
 
 # For production
 wails build -m -nosyncgomod -tags webkit2_41
