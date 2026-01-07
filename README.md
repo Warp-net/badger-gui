@@ -1,3 +1,4 @@
+<iframe src="https://snapcraft.io/badger-gui/embedded?button=black" frameborder="0" width="100%" height="450px" style="border: 1px solid #CCC; border-radius: 2px;"></iframe>
 # Badger DB GUI
 ![screenshot.png](screenshot.png)
 A graphical user interface for managing [Badger](https://github.com/dgraph-io/badger) key-value database
@@ -23,6 +24,11 @@ A graphical user interface for managing [Badger](https://github.com/dgraph-io/ba
   - Split-panel design for browsing and editing
   - Dark theme interface
   - Error handling with modal dialogs
+
+## Download
+ 
+ - [Release binaries](https://github.com/Warp-net/badger-gui/releases)
+ - [Snapstore](https://snapcraft.io/badger-gui)
 
 ## Building
 
