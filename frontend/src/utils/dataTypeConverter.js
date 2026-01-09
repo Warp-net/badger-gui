@@ -18,28 +18,42 @@ function isHexString(str) {
  */
 function isBase64String(str) {
   if (typeof str !== 'string') return false
-  // Base64 regex pattern
-  const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/
+  // Base64 regex pattern (supports standard and URL-safe variants)
+  const base64Regex = /^[A-Za-z0-9+/_-]+={0,2}$/
   return base64Regex.test(str) && str.length % 4 === 0
 }
 
 /**
  * Check if data appears to be binary (contains non-printable characters)
+ * Uses heuristic approach to avoid flagging UTF-8 text as binary
  */
 function isBinaryData(str) {
   if (typeof str !== 'string') return false
-  // Check for null bytes or other non-printable characters
-  for (let i = 0; i < Math.min(str.length, 100); i++) {
+  
+  // Very short strings are unlikely to be binary
+  if (str.length < 4) return false
+  
+  // Heuristic: look for null bytes and a high proportion of non-printable control characters
+  const maxCheckLength = Math.min(str.length, 100)
+  let controlCharCount = 0
+  
+  for (let i = 0; i < maxCheckLength; i++) {
     const code = str.charCodeAt(i)
-    // Check for control characters except newline, tab, and carriage return
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+    // Null byte is a strong indicator of binary data
+    if (code === 0) {
       return true
     }
-    // Check for common binary patterns
-    if (code > 127) {
-      return true
+    // Count control characters except tab (9), newline (10), and carriage return (13)
+    if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) {
+      controlCharCount++
     }
   }
+  
+  // If more than 30% of inspected characters are control chars, treat as binary
+  if (maxCheckLength > 0 && controlCharCount / maxCheckLength > 0.3) {
+    return true
+  }
+  
   return false
 }
 
@@ -78,21 +92,29 @@ function binaryToHex(str) {
 }
 
 /**
- * Convert hexadecimal string to regular string
+ * Convert hexadecimal string to regular string with UTF-8 support
  */
 function hexToString(hex) {
   try {
     // Remove 0x prefix if present
     const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex
-    let str = ''
+    
+    // Convert hex to byte array
+    const bytes = new Uint8Array(cleanHex.length / 2)
     for (let i = 0; i < cleanHex.length; i += 2) {
-      const charCode = parseInt(cleanHex.substr(i, 2), 16)
-      // Only add printable characters
-      if (charCode >= 32 && charCode <= 126) {
-        str += String.fromCharCode(charCode)
-      }
+      bytes[i / 2] = parseInt(cleanHex.slice(i, i + 2), 16)
     }
-    return str || hex // Return original if conversion fails
+    
+    // Use TextDecoder for proper UTF-8 decoding
+    const decoder = new TextDecoder('utf-8', { fatal: false })
+    const str = decoder.decode(bytes)
+    
+    // Only return decoded string if it contains meaningful content
+    if (str && str.trim().length > 0) {
+      return str
+    }
+    
+    return hex // Return original if conversion fails
   } catch (e) {
     return hex
   }
@@ -188,9 +210,10 @@ export function detectAndConvertDataType(value) {
   }
 
   // Check if it's a hex string that should be converted
-  if (isHexString(value) && value.length > 10) {
+  // Use minimum length of 16 to avoid false positives with short strings
+  if (isHexString(value) && value.length >= 16) {
     const converted = hexToString(value)
-    if (converted !== value && converted.length > 0) {
+    if (converted !== value && converted.length > 0 && !isBinaryData(converted)) {
       return {
         displayValue: converted,
         detectedType: 'hex',

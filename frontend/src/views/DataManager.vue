@@ -92,7 +92,7 @@
 
       <!-- Right Panel -->
       <div class="flex-1 flex flex-col">
-        <div v-if="!selectedKey" class="flex-1 flex keys-center justify-center text-gray-500">
+        <div v-if="!selectedKey" class="flex-1 flex items-center justify-center text-gray-500">
           <div class="text-center">
             <p class="text-xl">Select a key to view its value</p>
           </div>
@@ -107,7 +107,7 @@
           </div>
 
           <div class="mb-4 flex-1 flex flex-col">
-            <div class="flex keys-center justify-between mb-2">
+            <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-2">
                 <h2 class="text-lg font-semibold">Value</h2>
                 <span
@@ -265,9 +265,20 @@ export default {
     const newEntry = ref({ key: '', value: '' })
     const showOriginalValue = ref(false)
 
-    // Computed property for data type detection and conversion
+    // Cached value type info for performance optimization
+    const cachedValueTypeInfo = ref(null)
+
+    // Computed property for data type detection and conversion with caching
     const valueTypeInfo = computed(() => {
-      return detectAndConvertDataType(currentValue.value)
+      // Return cached result if available and value hasn't changed
+      if (cachedValueTypeInfo.value && cachedValueTypeInfo.value.originalValue === currentValue.value) {
+        return cachedValueTypeInfo.value
+      }
+      
+      // Compute and cache the result
+      const result = detectAndConvertDataType(currentValue.value)
+      cachedValueTypeInfo.value = result
+      return result
     })
 
     const valueTypeBadge = computed(() => {
@@ -286,9 +297,10 @@ export default {
       }
     })
 
-    // Reset showOriginalValue when switching keys
+    // Reset showOriginalValue and cache when switching keys
     watch(selectedKey, () => {
       showOriginalValue.value = false
+      cachedValueTypeInfo.value = null
     })
 
     const colors = [
