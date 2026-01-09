@@ -1,6 +1,7 @@
 /**
  * Data type detection and conversion utilities
  * Converts various data formats to human-readable strings
+ * @version 2.0.0 - Fixed false positive detection for simple strings
  */
 
 /**
@@ -183,9 +184,43 @@ function bytesToString(bytes) {
  * @returns {Object} - Object with displayValue and detectedType
  */
 export function detectAndConvertDataType(value) {
+  // Handle null/undefined/empty
   if (!value || typeof value !== 'string') {
     return {
       displayValue: value || '',
+      detectedType: 'string',
+      originalValue: value
+    }
+  }
+
+  // CRITICAL: Skip conversion for very short strings (1-3 chars)
+  // These are almost never binary/encoded data
+  if (value.length <= 3) {
+    return {
+      displayValue: value,
+      detectedType: 'string',
+      originalValue: value
+    }
+  }
+
+  // CRITICAL: Skip conversion for simple printable ASCII strings
+  // But EXCLUDE hex-like strings and base64-like strings from this check
+  const looksLikeHex = /^(0x)?[0-9A-Fa-f]+$/.test(value) && value.length >= 16
+  const looksLikeBase64 = /^[A-Za-z0-9+/_-]+={0,2}$/.test(value) && value.length >= 20
+  
+  if (!looksLikeHex && !looksLikeBase64 && /^[\x20-\x7E\t\n\r]+$/.test(value) && value.length < 100) {
+    // This is plain ASCII text, don't try to convert
+    // Exception: still check for large numbers
+    if (/^\d+$/.test(value) && parseInt(value) > 1024) {
+      return {
+        displayValue: `${value} (${bytesToString(value)})`,
+        detectedType: 'bytes',
+        originalValue: value
+      }
+    }
+    
+    return {
+      displayValue: value,
       detectedType: 'string',
       originalValue: value
     }
