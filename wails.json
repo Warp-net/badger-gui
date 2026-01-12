@@ -3,9 +3,12 @@
   "name": "badger-gui",
   "outputfilename": "badger-gui",
   "icon": "icon.png",
-  "skipfrontend": true,
+  "skipfrontend": false,
   "frontend:dir": "frontend/src",
   "frontend:dev:serverUrl": "auto",
+  "assetdir": "frontend/dist",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
   "go:build:mod": "vendor",
   "author": {
     "name": "Vadim Filin"
