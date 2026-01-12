@@ -11,8 +11,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"log"
-	"net/http"
-	"strings"
 )
 
 //go:embed frontend/dist
@@ -20,23 +18,6 @@ var assets embed.FS
 
 //go:embed icon.png
 var icon []byte
-
-// utf8Middleware ensures proper UTF-8 charset headers for web assets
-func utf8Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set charset headers for web assets
-		if strings.HasSuffix(r.URL.Path, ".html") || r.URL.Path == "/" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		} else if strings.HasSuffix(r.URL.Path, ".js") {
-			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		} else if strings.HasSuffix(r.URL.Path, ".css") {
-			w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		} else if strings.HasSuffix(r.URL.Path, ".json") {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 
 func main() {
 	db, err := database.New(nil)
@@ -54,8 +35,7 @@ func main() {
 		Height:           1024,
 		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
-			Assets:     assets,
-			Middleware: assetserver.ChainMiddleware(utf8Middleware),
+			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
