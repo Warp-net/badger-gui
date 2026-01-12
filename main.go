@@ -21,10 +21,10 @@ var assets embed.FS
 //go:embed icon.png
 var icon []byte
 
-// utf8Middleware ensures proper UTF-8 charset headers for HTML, CSS, and JS files
+// utf8Middleware ensures proper UTF-8 charset headers for web assets
 func utf8Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set charset for HTML files
+		// Set charset headers for web assets
 		if strings.HasSuffix(r.URL.Path, ".html") || r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		} else if strings.HasSuffix(r.URL.Path, ".js") {
