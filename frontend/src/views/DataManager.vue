@@ -9,8 +9,8 @@
               v-if="isInMemory"
               class="text-xs font-semibold px-2 py-1 rounded bg-red-600 text-white"
           >
-        IN MEMORY
-      </span>
+            IN MEMORY
+          </span>
         </h1>
       </div>
     </div>
@@ -33,7 +33,8 @@
             >
               Search
             </button>
-            <button v-if="isInSearch"
+            <button
+                v-if="isInSearch"
                 @click="loadKeys(false)"
                 class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
             >
@@ -92,7 +93,7 @@
 
       <!-- Right Panel -->
       <div class="flex-1 flex flex-col">
-        <div v-if="!selectedKey" class="flex-1 flex keys-center justify-center text-gray-500">
+        <div v-if="!selectedKey" class="flex-1 flex items-center justify-center text-gray-500">
           <div class="text-center">
             <p class="text-xl">Select a key to view its value</p>
           </div>
@@ -102,16 +103,57 @@
           <div class="mb-4">
             <h2 class="text-lg font-semibold mb-2">Key</h2>
             <div class="flex flex-wrap gap-1 p-3 bg-gray-800 border border-gray-700 rounded">
-                {{ selectedKey }}
+              {{ selectedKey }}
             </div>
           </div>
 
           <div class="mb-4 flex-1 flex flex-col">
             <div class="flex keys-center justify-between mb-2">
               <h2 class="text-lg font-semibold">Value</h2>
+
               <div class="flex gap-2">
+                <!-- Convert buttons -->
                 <button
-                    @click="editMode = !editMode"
+                    v-if="activeEncoding === 'none'"
+                    @click="convertToBase64"
+                    class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+                    :disabled="editMode"
+                    :class="{ 'opacity-50 cursor-not-allowed': editMode }"
+                >
+                  base64
+                </button>
+                <button
+                    v-if="activeEncoding === 'base64'"
+                    @click="restoreOriginal"
+                    class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-gray-500"
+                    :disabled="editMode"
+                    :class="{ 'opacity-50 cursor-not-allowed': editMode }"
+                >
+                  original
+                </button>
+
+                <button
+                    v-if="activeEncoding === 'none'"
+                    @click="convertToHex"
+                    class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-500"
+                    :disabled="editMode"
+                    :class="{ 'opacity-50 cursor-not-allowed': editMode }"
+                >
+                  hex
+                </button>
+                <button
+                    v-if="activeEncoding === 'hex'"
+                    @click="restoreOriginal"
+                    class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-gray-500"
+                    :disabled="editMode"
+                    :class="{ 'opacity-50 cursor-not-allowed': editMode }"
+                >
+                  original
+                </button>
+
+                <!-- Existing buttons -->
+                <button
+                    @click="toggleEditMode"
                     class="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-yellow-500"
                 >
                   {{ editMode ? 'Cancel' : 'Edit' }}
@@ -213,7 +255,6 @@
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -235,6 +276,8 @@ export default {
     const keys = ref([])
     const selectedKey = ref(null)
     const currentValue = ref('')
+    const originalValue = ref('')
+    const activeEncoding = ref('none') // 'none' | 'base64' | 'hex'
     const editMode = ref(false)
     const loading = ref(false)
     const searchPrefix = ref('')
@@ -255,7 +298,7 @@ export default {
       '#8B5CF6', // purple
       '#EC4899', // pink
       '#14B8A6', // teal
-      '#F97316', // orange
+      '#F97316' // orange
     ]
 
     const getColor = (index) => {
@@ -263,18 +306,74 @@ export default {
     }
 
     const parseKey = (key) => {
-      key = key.startsWith(delimiter.value)
-          ? key.slice(delimiter.value.length)
-          : key;1
-      return key.split(delimiter.value)
+      const trimmedKey = key.startsWith(delimiter.value) ? key.slice(delimiter.value.length) : key
+      return trimmedKey.split(delimiter.value)
     }
 
     const parseResponse = (response) => {
-        return JSON.parse(response.body)
+      return JSON.parse(response.body)
     }
 
     const isOkResponse = (responseText) => {
       return responseText === 'ok'
+    }
+
+    const restoreOriginal = () => {
+      currentValue.value = originalValue.value
+      activeEncoding.value = 'none'
+    }
+
+    const bytesToBase64 = (bytes) => {
+      let binaryString = ''
+      const chunkSize = 0x8000
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        const chunk = bytes.subarray(offset, offset + chunkSize)
+        binaryString += String.fromCharCode(...chunk)
+      }
+      return btoa(binaryString)
+    }
+
+    const convertToBase64 = () => {
+      try {
+        originalValue.value = currentValue.value
+        const encoder = new TextEncoder()
+        const bytes = encoder.encode(currentValue.value)
+        currentValue.value = bytesToBase64(bytes)
+        activeEncoding.value = 'base64'
+      } catch (error) {
+        console.error('[Frontend] Error converting to base64:', error)
+        errorMessage.value = 'Failed to convert to base64: ' + (error.message || error)
+        showError.value = true
+      }
+    }
+
+
+    const convertToHex = () => {
+      try {
+        originalValue.value = currentValue.value
+        const encoder = new TextEncoder()
+        const bytes = encoder.encode(currentValue.value)
+        currentValue.value = Array.from(bytes)
+            .map((byteValue) => byteValue.toString(16).padStart(2, '0'))
+            .join('')
+        activeEncoding.value = 'hex'
+      } catch (error) {
+        console.error('[Frontend] Error converting to hex:', error)
+        errorMessage.value = 'Failed to convert to hex: ' + (error.message || error)
+        showError.value = true
+      }
+    }
+
+    const toggleEditMode = () => {
+      if (editMode.value) {
+        // Cancel edit: revert edits, and also reset encoding to avoid surprises.
+        currentValue.value = originalValue.value
+        activeEncoding.value = 'none'
+      } else {
+        // Enter edit: ensure the value is original (not encoded).
+        restoreOriginal()
+      }
+      editMode.value = !editMode.value
     }
 
     const loadKeys = async (loadMore = false) => {
@@ -295,17 +394,17 @@ export default {
         console.log('[Frontend] Sending list request:', message)
         const response = await Call(message)
         console.log('[Frontend] Received list response:', response)
-        
+
         if (response.type === 'list') {
           const data = parseResponse(response)
           console.log('[Frontend] Parsed list data:', data)
-          
+
           if (loadMore) {
             keys.value = [...keys.value, ...(data.keys || [])]
           } else {
             keys.value = data.keys || []
           }
-          
+
           cursor.value = data.cursor || null
         } else {
           const errorText = parseResponse(response)
@@ -378,15 +477,15 @@ export default {
       }
     }
 
-    // TODO
     const searchMore = () => {
-      searchKeys(isInSearch)
+      searchKeys(isInSearch.value)
     }
 
     const selectKey = async (key) => {
       selectedKey.value = key
       editMode.value = false
-      
+      activeEncoding.value = 'none'
+
       try {
         const message = {
           type: 'get',
@@ -398,11 +497,12 @@ export default {
         console.log('[Frontend] Sending get request:', message)
         const response = await Call(message)
         console.log('[Frontend] Received get response:', response)
-        
+
         if (response.type === 'get') {
           const data = parseResponse(response)
           console.log('[Frontend] Parsed get data:', data)
           currentValue.value = data.value
+          originalValue.value = data.value
         } else {
           const errorText = parseResponse(response)
           console.error('[Frontend] Get operation failed:', errorText)
@@ -418,22 +518,28 @@ export default {
 
     const updateValue = async () => {
       try {
+        // Always save the original (not encoded) value.
+        const valueToSave = activeEncoding.value === 'none' ? currentValue.value : originalValue.value
+
         const message = {
           type: 'set',
           body: JSON.stringify({
             key: selectedKey.value,
-            value: currentValue.value
+            value: valueToSave
           })
         }
 
         console.log('[Frontend] Sending set request:', message)
         const response = await Call(message)
         console.log('[Frontend] Received set response:', response)
-        
+
         const responseText = response.body
         console.log('[Frontend] Set response text:', responseText)
         if (isOkResponse(responseText)) {
           editMode.value = false
+          currentValue.value = valueToSave
+          originalValue.value = valueToSave
+          activeEncoding.value = 'none'
           await loadKeys()
         } else {
           console.error('[Frontend] Set operation failed:', responseText)
@@ -463,14 +569,15 @@ export default {
         console.log('[Frontend] Sending delete request:', message)
         const response = await Call(message)
         console.log('[Frontend] Received delete response:', response)
-        
+
         const responseText = response.body
         console.log('[Frontend] Delete response text:', responseText)
         if (isOkResponse(responseText)) {
           showDeleteConfirm.value = false
           selectedKey.value = null
           currentValue.value = ''
-          // Reload the list
+          originalValue.value = ''
+          activeEncoding.value = 'none'
           await loadKeys()
         } else {
           console.error('[Frontend] Delete operation failed:', responseText)
@@ -497,13 +604,12 @@ export default {
         console.log('[Frontend] Sending add entry request:', message)
         const response = await Call(message)
         console.log('[Frontend] Received add entry response:', response)
-        
+
         const responseText = response.body
         console.log('[Frontend] Add entry response text:', responseText)
         if (isOkResponse(responseText)) {
           showAddModal.value = false
           newEntry.value = { key: '', value: '' }
-          // Reload the list
           await loadKeys()
         } else {
           console.error('[Frontend] Add entry operation failed:', responseText)
@@ -537,6 +643,7 @@ export default {
       showAddModal,
       showDeleteConfirm,
       newEntry,
+      activeEncoding,
       parseKey,
       getColor,
       loadKeys,
@@ -547,7 +654,11 @@ export default {
       updateValue,
       confirmDelete,
       deleteKey,
-      addEntry
+      addEntry,
+      convertToBase64,
+      convertToHex,
+      restoreOriginal,
+      toggleEditMode
     }
   }
 }
