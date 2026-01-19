@@ -1,7 +1,7 @@
 name: badger-gui
 title: Badger DB GUI
 base: core24
-version: 0.0.1
+version: 0.0.2
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Database Graphical User Interface

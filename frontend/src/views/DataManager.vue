@@ -311,7 +311,9 @@ export default {
     }
 
     const parseResponse = (response) => {
-      return JSON.parse(response.body)
+      const buffer = Buffer.from(response.body, 'hex');
+      const bodyText = buffer.toString('utf8');
+      return JSON.parse(bodyText)
     }
 
     const isOkResponse = (responseText) => {
@@ -322,6 +324,11 @@ export default {
       currentValue.value = originalValue.value
       activeEncoding.value = 'none'
     }
+
+    const toHex = (text) =>
+        Array.from(new TextEncoder().encode(text), (byteValue) =>
+            byteValue.toString(16).padStart(2, '0')
+        ).join('')
 
     const bytesToBase64 = (bytes) => {
       let binaryString = ''
@@ -346,7 +353,6 @@ export default {
         showError.value = true
       }
     }
-
 
     const convertToHex = () => {
       try {

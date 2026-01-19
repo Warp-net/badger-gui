@@ -115,7 +115,9 @@ export default {
     }
 
     const parseResponse = (response) => {
-      return JSON.parse(response.body)
+      const buffer = Buffer.from(response.body, 'hex');
+      const bodyText = buffer.toString('utf8');
+      return JSON.parse(bodyText)
     }
 
     const openDatabase = async () => {

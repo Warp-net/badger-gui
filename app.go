@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"log"
@@ -144,7 +145,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		}
 		log.Printf("db opened with delimiter [%s], in memory [%t]", openMsg.Delimiter, a.db.IsInMemory())
 		bt, _ := json.Marshal(OpenResponse{OkStatus, a.db.IsInMemory()})
-		return AppMessage{msg.Type, string(bt)}
+		return AppMessage{msg.Type, toHex(bt)}
 	case TypeSet:
 		if !a.db.IsRunning() {
 			log.Printf("db not running for set operation")
@@ -181,7 +182,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 			value = []byte("[image]")
 		}
 		bt, _ := json.Marshal(Item{Key: getMsg.Key, Value: string(value)})
-		return AppMessage{msg.Type, string(bt)}
+		return AppMessage{msg.Type, toHex(bt)}
 	case TypeDelete:
 		if !a.db.IsRunning() {
 			log.Printf("db not running for delete operation")
@@ -214,7 +215,7 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		}
 		bt, _ := json.Marshal(ListResponse{Cursor: cursor, Keys: keys})
 		log.Printf("listed %d items, cursor: %s", len(keys), cursor)
-		return AppMessage{msg.Type, string(bt)}
+		return AppMessage{msg.Type, toHex(bt)}
 	case TypeSearch:
 		if !a.db.IsRunning() {
 			log.Printf("db not running for list operation")
@@ -232,11 +233,15 @@ func (a *App) Call(msg AppMessage) (response AppMessage) {
 		}
 		bt, _ := json.Marshal(SearchResponse{Keys: keys, Offset: len(keys)})
 		log.Printf("found %d items", len(keys))
-		return AppMessage{msg.Type, string(bt)}
+		return AppMessage{msg.Type, toHex(bt)}
 	default:
 		log.Printf("unsupported message type: %s", msg.Type)
 		return AppMessage{"", UnknownMessageTypeResponse}
 	}
+}
+
+func toHex(bt []byte) string {
+	return hex.EncodeToString(bt)
 }
 
 func (a *App) close(_ context.Context) {
