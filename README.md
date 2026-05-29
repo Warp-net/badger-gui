@@ -3,6 +3,14 @@
 ![screenshot.png](screenshot.png)
 A graphical user interface for managing [Badger](https://github.com/dgraph-io/badger) key-value database
 
+> [!NOTE]
+> This is **not** a vibe-coding experiment.
+> `badger-gui` was extracted from the [Warpnet](https://github.com/Warp-net/warpnet)
+> project, where it's used as a real tool against production BadgerDB stores.
+> The code follows consistent conventions, is well-tested, and aims for
+> reliable, predictable behavior over quick hacks.
+> Bug reports and contributions are welcome.
+
 ## Features
 
 - **Database Connection**: Open Badger databases with support for:
