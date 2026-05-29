@@ -1,7 +1,19 @@
 [![badger-gui](https://snapcraft.io/badger-gui/badge.svg)](https://snapcraft.io/badger-gui)
+[![Release](https://img.shields.io/github/v/release/Warp-net/badger-gui)](https://github.com/Warp-net/badger-gui/releases)
+[![License](https://img.shields.io/github/license/Warp-net/badger-gui)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Warp-net/badger-gui?style=social)](https://github.com/Warp-net/badger-gui/stargazers)
+
 # Badger DB GUI
-![screenshot.png](screenshot.png)
-A graphical user interface for managing [Badger](https://github.com/dgraph-io/badger) key-value database
+
+**A desktop GUI to browse, inspect, and edit [BadgerDB](https://github.com/dgraph-io/badger) key-value databases — no scripts, no shell, no guesswork.**
+
+![badger-gui screenshot — browsing a BadgerDB key-value database in a desktop GUI](screenshot.png)
+
+`badger-gui` is a lightweight desktop application for working with embedded BadgerDB
+key-value stores through a visual interface. Open a database, browse and search keys,
+view and edit values, and run full CRUD operations directly — instead of writing
+one-off Go programs to inspect your data. It's handy during development, debugging,
+and incident analysis, when you just need to look inside a Badger store quickly.
 
 > [!NOTE]
 > This is **not** a vibe-coding experiment.
@@ -10,6 +22,13 @@ A graphical user interface for managing [Badger](https://github.com/dgraph-io/ba
 > The code follows consistent conventions, is well-tested, and aims for
 > reliable, predictable behavior over quick hacks.
 > Bug reports and contributions are welcome.
+
+## Why badger-gui?
+
+- Inspect embedded BadgerDB data without writing throwaway code or scripts
+- Navigate large, nested key spaces with color-coded, delimiter-aware visualization
+- Safely view, edit, add, and delete key-value pairs from a GUI
+- Works with encrypted databases and Snappy / ZSTD compression
 
 ## Features
 
@@ -34,9 +53,9 @@ A graphical user interface for managing [Badger](https://github.com/dgraph-io/ba
   - Error handling with modal dialogs
 
 ## Download
- 
- - [Release binaries](https://github.com/Warp-net/badger-gui/releases)
- - [Snapstore](https://snapcraft.io/badger-gui)
+
+- [Release binaries](https://github.com/Warp-net/badger-gui/releases)
+- [Snap Store](https://snapcraft.io/badger-gui) (Linux)
 
 ## Building
 
@@ -86,19 +105,6 @@ wails build -m -nosyncgomod -tags webkit2_41
 - **Frontend**: Vue 3 with Vue Router
 - **Communication**: Wails v2 binding for Go-JavaScript interop
 - **Styling**: Tailwind CSS (inline utility classes)
-
-## API Methods
-
-The application exposes the following backend methods:
-
-- `OpenDirectoryDialog()`: Opens a directory picker dialog
-- `Call(AppMessage)`: Main RPC endpoint for database operations
-  - `open`: Open database connection
-  - `list`: List keys with optional pagination
-  - `search`: Search keys with prefix filter and pagination
-  - `get`: Retrieve value for a specific key
-  - `set`: Create or update a key-value pair
-  - `delete`: Remove a key-value pair
 
 ## Development
 
